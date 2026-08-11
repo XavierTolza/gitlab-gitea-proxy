@@ -8,6 +8,7 @@ from typing import Any
 import httpx
 
 from app.config import get_settings
+from app.services.errors import ApiError
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,7 @@ class GitLabClient:
     def __init__(self) -> None:
         settings = get_settings()
         self._base = f"{settings.gitlab_url}/api/v4"
+        self._base_url = settings.gitlab_url
         self._token = settings.gitlab_token
         self._timeout = settings.request_timeout
         self._verify = settings.ssl_verify
@@ -41,16 +43,32 @@ class GitLabClient:
             self._client = None
 
     # ------------------------------------------------------------------
-    # helpers
+    # internal helpers
     # ------------------------------------------------------------------
+
+    async def _call(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
+        """Wrapper that enriches httpx errors with full request/response context."""
+        full_url = f"{self._base_url}/api/v4{path}"
+        try:
+            if method == "GET":
+                resp = await self.client.get(path, **kwargs)
+            else:
+                raise ValueError(f"Unsupported method: {method}")
+            return resp
+        except ApiError:
+            raise
+        except httpx.HTTPStatusError as exc:
+            raise ApiError.from_httpx(exc, method, full_url) from exc
+        except httpx.RequestError as exc:
+            raise ApiError.from_httpx(exc, method, full_url) from exc
 
     async def _paginate(self, path: str, **params: Any) -> list[dict[str, Any]]:
         """Fetch all pages for a GET endpoint that returns a JSON array."""
         items: list[dict[str, Any]] = []
         page = 1
         while True:
-            resp = await self.client.get(
-                path, params={**params, "per_page": 100, "page": page}
+            resp = await self._call(
+                "GET", path, params={**params, "per_page": 100, "page": page}
             )
             resp.raise_for_status()
             body = resp.json()
@@ -69,10 +87,9 @@ class GitLabClient:
     async def health_check(self) -> bool:
         """Return True if the GitLab API is reachable and the token is valid."""
         try:
-            resp = await self.client.get("/version")
-            resp.raise_for_status()
+            await self._call("GET", "/version")
             return True
-        except Exception:
+        except ApiError:
             logger.exception("GitLab health-check failed")
             return False
 
@@ -84,9 +101,8 @@ class GitLabClient:
         """Resolve a group ID or URL-encoded path to a numeric group ID."""
         if group_ref.isdigit():
             return int(group_ref)
-        # URL-encode the path ourselves
         encoded = group_ref.replace("/", "%2F")
-        resp = await self.client.get(f"/groups/{encoded}")
+        resp = await self._call("GET", f"/groups/{encoded}")
         resp.raise_for_status()
         return resp.json()["id"]
 

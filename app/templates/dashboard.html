@@ -82,12 +82,13 @@
               <th class="px-4 py-3">Statut</th>
               <th class="px-4 py-3">Dernière synchro</th>
               <th class="px-4 py-3">Actions</th>
+              <th class="px-4 py-3"></th>
             </tr>
           </thead>
           <tbody>
             <template x-if="!data.projects || data.projects.length === 0">
               <tr>
-                <td colspan="6" class="px-4 py-12 text-center text-gray-500">
+                <td colspan="7" class="px-4 py-12 text-center text-gray-500">
                   <p x-show="data.gitlab_health === 'online'">Aucun projet découvert. Lancez un scan.</p>
                   <p x-show="data.gitlab_health !== 'online'">En attente de la connexion GitLab...</p>
                 </td>
@@ -113,6 +114,19 @@
                     🔄 Resync
                   </button>
                 </td>
+                <td class="px-4 py-3">
+                  <button x-show="p.status === 'error'"
+                    @click="showError(p)" :disabled="errorLoading === p.key"
+                    class="text-xs px-2 py-1 bg-red-900/40 hover:bg-red-800/50 text-red-300 rounded transition-colors"
+                    x-text="errorKey === p.key ? '✕ Fermer' : '🔍 Détails'"></button>
+                  <span x-show="errorLoading === p.key" class="text-xs text-gray-500 animate-pulse">⏳</span>
+                </td>
+              </tr>
+              <!-- Error detail row -->
+              <tr x-show="errorKey === p.key" class="bg-red-950/30 border-b border-red-900/30">
+                <td colspan="7" class="px-4 py-4">
+                  <pre class="text-xs text-red-200 font-mono whitespace-pre-wrap overflow-x-auto max-h-64" x-text="errorText"></pre>
+                </td>
               </tr>
             </template>
           </tbody>
@@ -127,6 +141,9 @@
         data: {},
         syncing: false,
         syncingOne: null,
+        errorKey: null,
+        errorText: '',
+        errorLoading: null,
 
         async fetchStatus() {
           try {
@@ -157,6 +174,57 @@
           } catch (e) {
             this.syncingOne = null;
           }
+        },
+
+        async showError(p) {
+          if (this.errorKey === p.key) {
+            this.errorKey = null;
+            this.errorText = '';
+            return;
+          }
+          this.errorKey = p.key;
+          this.errorLoading = p.key;
+
+          // First try from in-memory data (fast path)
+          if (p.error_detail) {
+            this.errorText = this.formatErrorDetail(p);
+            this.errorLoading = null;
+            return;
+          }
+
+          // Fallback: fetch from dedicated endpoint
+          var self = this;
+          try {
+            var r = await fetch('/api/error/' + p.gitea_org + '/' + p.gitea_repo);
+            var d = await r.json();
+            self.errorText = d.error_formatted || d.error_message || 'Aucun detail disponible';
+          } catch (e) {
+            self.errorText = p.error || 'Erreur inconnue';
+          }
+          this.errorLoading = null;
+        },
+
+        formatErrorDetail(p) {
+          var parts = [];
+          if (p.error) {
+            parts.push('Message: ' + p.error);
+          }
+          if (p.error_detail) {
+            var d = p.error_detail;
+            if (d.method && d.url) {
+              parts.push('Requete: ' + d.method + ' ' + d.url);
+            }
+            if (d.status_code) {
+              parts.push('Status HTTP: ' + d.status_code);
+            }
+            if (d.request_payload) {
+              parts.push('Payload: ' + JSON.stringify(d.request_payload, null, 2));
+            }
+            if (d.response_body) {
+              parts.push('Reponse: ' + d.response_body);
+            }
+          }
+          return parts.join('\n');
         },
 
         statusIndicator(health) {

@@ -76,6 +76,7 @@ async def api_status():
                         m.last_success.isoformat() if m.last_success else None
                     ),
                     "error": m.error_message,
+                    "error_detail": m.error_detail,
                 }
             )
         return {
@@ -101,6 +102,26 @@ async def api_sync_single(org: str, repo: str):
     """Trigger a mirror sync for a specific repo."""
     asyncio.create_task(sync_single_project(org, repo))
     return {"message": f"Sync triggered for {org}/{repo}"}
+
+
+@app.get("/api/error/{org}/{repo:path}")
+async def api_error_detail(org: str, repo: str):
+    """Return the detailed error for a specific mirrored project."""
+    from app.services.errors import format_error_for_display
+
+    state = get_state()
+    key = f"{org}/{repo}"
+    async with state._lock:
+        mirror = state.projects.get(key)
+        if mirror is None:
+            return {"error": "Project not found"}
+        return {
+            "key": key,
+            "status": mirror.status.value,
+            "error_message": mirror.error_message,
+            "error_detail": mirror.error_detail,
+            "error_formatted": format_error_for_display(mirror.error_detail),
+        }
 
 
 # ---------------------------------------------------------------------------

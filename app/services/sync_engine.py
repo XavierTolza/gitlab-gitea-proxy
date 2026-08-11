@@ -10,6 +10,7 @@ from enum import Enum
 from typing import Any
 
 from app.config import get_settings
+from app.services.errors import ApiError
 from app.services.gitlab_client import GitLabClient
 from app.services.gitea_client import GiteaClient
 
@@ -40,6 +41,7 @@ class ProjectMirror:
     status: MirrorStatus = MirrorStatus.OK
     last_success: datetime | None = None
     error_message: str = ""
+    error_detail: dict[str, Any] | None = None
 
 
 @dataclass
@@ -159,11 +161,18 @@ async def run_full_sync() -> None:
                     mirror.status = MirrorStatus.OK
                     mirror.error_message = ""
 
+            except ApiError as exc:
+                logger.error("API error mirroring %s: %s", gl_path, exc)
+                async with state._lock:
+                    mirror.status = MirrorStatus.ERROR
+                    mirror.error_message = str(exc)
+                    mirror.error_detail = exc.to_dict()
             except Exception as exc:
                 logger.exception("Failed to mirror %s", gl_path)
                 async with state._lock:
                     mirror.status = MirrorStatus.ERROR
                     mirror.error_message = str(exc)
+                    mirror.error_detail = None
 
     except Exception as exc:
         logger.exception("Full sync failed")
