@@ -1,0 +1,44 @@
+services:
+  gitea:
+    image: gitea/gitea:1.22
+    container_name: gitea-local
+    environment:
+      - GITEA__server__DOMAIN=localhost
+      - GITEA__server__HTTP_PORT=3000
+      - GITEA__server__ROOT_URL=http://localhost:3000/
+      - GITEA__security__INSTALL_LOCK=true
+      - GITEA__database__DB_TYPE=sqlite3
+      - GITEA__repository__ENABLE_PUSH_CREATE_USER=true
+      - GITEA__repository__ENABLE_PUSH_CREATE_ORG=true
+    ports:
+      - "3000:3000"
+      - "2222:22"
+    volumes:
+      - gitea-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/v1/version"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mirror-sync:
+    build: .
+    container_name: gitlab-gitea-mirror-sync
+    ports:
+      - "${WEB_PORT:-8000}:8000"
+    environment:
+      - GITLAB_URL=${GITLAB_URL}
+      - GITLAB_TOKEN=${GITLAB_TOKEN}
+      - GITLAB_TARGET_GROUP=${GITLAB_TARGET_GROUP}
+      - GITEA_URL=${GITEA_URL:-http://gitea:3000}
+      - GITEA_TOKEN=${GITEA_TOKEN}
+      - GITEA_TARGET_ORG=${GITEA_TARGET_ORG:-gitlab-backup}
+      - POLL_INTERVAL_SECONDS=${POLL_INTERVAL_SECONDS:-600}
+      - WEB_PORT=8000
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    depends_on:
+      gitea:
+        condition: service_healthy
+
+volumes:
+  gitea-data:

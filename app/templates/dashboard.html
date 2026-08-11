@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="fr" class="bg-gray-950 text-gray-100">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GitLab → Gitea MirrorSync</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="min-h-screen" x-data="dashboard()" x-init="fetchStatus(); setInterval(fetchStatus, 5000)">
+
+  <!-- Header -->
+  <header class="border-b border-gray-800 bg-gray-900">
+    <div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+      <div>
+        <h1 class="text-xl font-bold tracking-tight">
+          <span class="text-orange-500">GitLab</span>
+          <span class="text-gray-400 mx-2">→</span>
+          <span class="text-teal-400">Gitea</span>
+          <span class="text-gray-500 font-normal ml-2">MirrorSync</span>
+        </h1>
+      </div>
+      <div class="flex items-center gap-3">
+        <button @click="syncAll()" :disabled="syncing"
+          class="px-4 py-2 bg-teal-600 hover:bg-teal-500 disabled:opacity-50 rounded-lg text-sm font-medium transition-colors">
+          <span x-show="!syncing">🔄 Scanner & Synchroniser</span>
+          <span x-show="syncing" class="animate-pulse">⏳ Scan en cours...</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 py-6">
+    <!-- Status cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+      <!-- GitLab health -->
+      <div class="bg-gray-900 rounded-xl border border-gray-800 p-4">
+        <div class="flex items-center gap-2 mb-1">
+          <span class="text-orange-500 font-semibold text-sm">GitLab</span>
+          <span class="text-xs text-gray-500">{{ gitlab_url }}</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full" :class="statusIndicator(data.gitlab_health)"></span>
+          <span class="text-sm capitalize" x-text="data.gitlab_health || 'Inconnu'"></span>
+        </div>
+      </div>
+
+      <!-- Gitea health -->
+      <div class="bg-gray-900 rounded-xl border border-gray-800 p-4">
+        <div class="flex items-center gap-2 mb-1">
+          <span class="text-teal-400 font-semibold text-sm">Gitea</span>
+          <span class="text-xs text-gray-500">{{ gitea_url }}</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full" :class="statusIndicator(data.gitea_health)"></span>
+          <span class="text-sm capitalize" x-text="data.gitea_health || 'Inconnu'"></span>
+        </div>
+      </div>
+
+      <!-- Last scan -->
+      <div class="bg-gray-900 rounded-xl border border-gray-800 p-4">
+        <div class="text-gray-500 text-xs mb-1">Dernier scan</div>
+        <div class="text-sm" x-text="data.last_full_scan ? formatDate(data.last_full_scan) : 'Jamais'"></div>
+        <div x-show="data.last_scan_error" class="text-red-400 text-xs mt-1" x-text="data.last_scan_error"></div>
+      </div>
+    </div>
+
+    <!-- Projects table -->
+    <div class="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
+      <div class="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
+        <h2 class="font-semibold">Projets Miroirs</h2>
+        <span class="text-xs text-gray-500" x-text="data.projects ? data.projects.length + ' projet(s)' : ''"></span>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-left text-gray-400 text-xs uppercase tracking-wider border-b border-gray-800">
+              <th class="px-4 py-3">Projet</th>
+              <th class="px-4 py-3">Chemin GitLab</th>
+              <th class="px-4 py-3">URL Gitea</th>
+              <th class="px-4 py-3">Statut</th>
+              <th class="px-4 py-3">Dernière synchro</th>
+              <th class="px-4 py-3">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-if="!data.projects || data.projects.length === 0">
+              <tr>
+                <td colspan="6" class="px-4 py-12 text-center text-gray-500">
+                  <p x-show="data.gitlab_health === 'online'">Aucun projet découvert. Lancez un scan.</p>
+                  <p x-show="data.gitlab_health !== 'online'">En attente de la connexion GitLab...</p>
+                </td>
+              </tr>
+            </template>
+            <template x-for="p in data.projects" :key="p.key">
+              <tr class="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors">
+                <td class="px-4 py-3 font-medium" x-text="p.gitlab_name"></td>
+                <td class="px-4 py-3 text-gray-400 text-xs font-mono" x-text="p.gitlab_path"></td>
+                <td class="px-4 py-3 text-xs">
+                  <a :href="p.gitea_url" target="_blank" class="text-teal-400 hover:underline font-mono" x-text="p.key"></a>
+                </td>
+                <td class="px-4 py-3">
+                  <span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full"
+                    :class="statusBadge(p.status)">
+                    <span x-text="statusLabel(p.status)"></span>
+                  </span>
+                </td>
+                <td class="px-4 py-3 text-xs text-gray-400" x-text="p.last_success ? formatDate(p.last_success) : '-'"></td>
+                <td class="px-4 py-3">
+                  <button @click="syncOne(p)" :disabled="syncingOne === p.key"
+                    class="text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 rounded transition-colors">
+                    🔄 Resync
+                  </button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    function dashboard() {
+      return {
+        data: {},
+        syncing: false,
+        syncingOne: null,
+
+        async fetchStatus() {
+          try {
+            const r = await fetch('/api/status');
+            this.data = await r.json();
+          } catch (e) {
+            console.error('Failed to fetch status', e);
+          }
+        },
+
+        async syncAll() {
+          this.syncing = true;
+          var self = this;
+          try {
+            await fetch('/api/sync/all', { method: 'POST' });
+            setTimeout(function() { self.fetchStatus(); self.syncing = false; }, 2000);
+          } catch (e) {
+            this.syncing = false;
+          }
+        },
+
+        async syncOne(p) {
+          this.syncingOne = p.key;
+          var self = this;
+          try {
+            await fetch('/api/sync/' + p.gitea_org + '/' + p.gitea_repo, { method: 'POST' });
+            setTimeout(function() { self.fetchStatus(); self.syncingOne = null; }, 2000);
+          } catch (e) {
+            this.syncingOne = null;
+          }
+        },
+
+        statusIndicator(health) {
+          return {
+            online: 'bg-green-400',
+            offline: 'bg-red-400',
+            auth_error: 'bg-yellow-400',
+          }[health] || 'bg-gray-500';
+        },
+
+        statusBadge(status) {
+          return {
+            ok: 'bg-green-900/50 text-green-300 border border-green-700/50',
+            error: 'bg-red-900/50 text-red-300 border border-red-700/50',
+            syncing: 'bg-blue-900/50 text-blue-300 border border-blue-700/50',
+          }[status] || 'bg-gray-800 text-gray-400';
+        },
+
+        statusLabel(status) {
+          return {
+            ok: '\u2705 En r\u00e8gle',
+            error: '\u274c Erreur',
+            syncing: '\u23f3 En cours',
+          }[status] || status;
+        },
+
+        formatDate(iso) {
+          return new Date(iso).toLocaleString('fr-FR');
+        }
+      }
+    }
+  </script>
+</body>
+</html>

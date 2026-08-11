@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      docker:
+        image: docker:27-dind
+        options: --privileged
+        ports:
+          - 2375:2375
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio pytest-timeout testcontainers httpx
+
+      - name: Set up Docker
+        run: |
+          docker info
+
+      - name: Run unit/integration tests (Gitea only)
+        env:
+          DOCKER_HOST: tcp://localhost:2375
+        run: |
+          python -m pytest tests/test_gitea_client.py -v --timeout=120
+
+      - name: Run GitLab + integration tests
+        if: env.TEST_GITLAB_TOKEN != ''
+        env:
+          TEST_GITLAB_URL: ${{ vars.TEST_GITLAB_URL || 'https://gitlab.com' }}
+          TEST_GITLAB_TOKEN: ${{ secrets.TEST_GITLAB_TOKEN }}
+          TEST_GITLAB_TARGET_GROUP: ${{ vars.TEST_GITLAB_TARGET_GROUP || '' }}
+          DOCKER_HOST: tcp://localhost:2375
+        run: |
+          python -m pytest tests/test_gitlab_client.py tests/test_integration_sync.py -v --timeout=180
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install ruff
+        run: pip install ruff
+      - name: Lint
+        run: ruff check app/ tests/
