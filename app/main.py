@@ -122,9 +122,9 @@ async def healthz():
 async def dashboard(request: Request):
     settings = get_settings()
     return templates.TemplateResponse(
+        request,
         "dashboard.html",
         {
-            "request": request,
             "gitlab_url": settings.gitlab_url,
             "gitea_url": settings.gitea_url,
             "poll_interval": settings.poll_interval_seconds,
