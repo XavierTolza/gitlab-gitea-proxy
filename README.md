@@ -89,6 +89,7 @@ Navigate to **http://localhost:8000** to see sync status and trigger operations.
 | `GITEA_URL` | *(required)* | Gitea instance base URL |
 | `GITEA_TOKEN` | *(required)* | Gitea Personal Access Token (`write:repository`, `write:organization`) |
 | `GITEA_TARGET_ORG` | `gitlab-backup` | Root Gitea organisation for mirrors |
+| `SSL_VERIFY` | `true` | Verify TLS certificates. Set to `false` to allow self-signed certificates. |
 | `POLL_INTERVAL_SECONDS` | `600` | Scan frequency in seconds |
 | `WEB_PORT` | `8000` | Dashboard port |
 | `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |

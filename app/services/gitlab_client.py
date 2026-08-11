@@ -20,6 +20,7 @@ class GitLabClient:
         self._base = f"{settings.gitlab_url}/api/v4"
         self._token = settings.gitlab_token
         self._timeout = settings.request_timeout
+        self._verify = settings.ssl_verify
         self._target_group = settings.gitlab_target_group
         self._client: httpx.AsyncClient | None = None
 
@@ -30,6 +31,7 @@ class GitLabClient:
                 base_url=self._base,
                 headers={"PRIVATE-TOKEN": self._token},
                 timeout=self._timeout,
+                verify=self._verify,
             )
         return self._client
 

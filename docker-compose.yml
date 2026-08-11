@@ -33,6 +33,7 @@ services:
       - GITEA_URL=${GITEA_URL:-http://gitea:3000}
       - GITEA_TOKEN=${GITEA_TOKEN}
       - GITEA_TARGET_ORG=${GITEA_TARGET_ORG:-gitlab-backup}
+      - SSL_VERIFY=${SSL_VERIFY:-true}
       - POLL_INTERVAL_SECONDS=${POLL_INTERVAL_SECONDS:-600}
       - WEB_PORT=8000
       - LOG_LEVEL=${LOG_LEVEL:-INFO}

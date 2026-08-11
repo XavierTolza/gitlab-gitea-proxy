@@ -20,6 +20,7 @@ class GiteaClient:
         self._base = f"{settings.gitea_url}/api/v1"
         self._token = settings.gitea_token
         self._timeout = settings.request_timeout
+        self._verify = settings.ssl_verify
         self._target_org = settings.gitea_target_org
         self._gitlab_url = settings.gitlab_url
         self._gitlab_token = settings.gitlab_token
@@ -32,6 +33,7 @@ class GiteaClient:
                 base_url=self._base,
                 headers={"Authorization": f"token {self._token}"},
                 timeout=self._timeout,
+                verify=self._verify,
             )
         return self._client
 

@@ -31,6 +31,12 @@ class Settings(BaseSettings):
         description="Root Gitea organisation where mirrors will be created",
     )
 
+    # --- TLS / SSL ---
+    ssl_verify: bool = Field(
+        True,
+        description="Verify TLS certificates. Set to false to allow self-signed certificates.",
+    )
+
     # --- Service ---
     poll_interval_seconds: int = Field(
         600, ge=30, description="How often to scan GitLab (seconds)"
