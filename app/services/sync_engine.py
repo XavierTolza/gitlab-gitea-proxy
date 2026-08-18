@@ -62,7 +62,9 @@ def get_state() -> SystemState:
     return _state
 
 
-async def _path_to_gitea(path_with_namespace: str, root_org: str) -> tuple[str, str]:
+async def _path_to_gitea(
+    path_with_namespace: str, root_org: str, gitlab_root: str
+) -> tuple[str, str]:
     """Convert GitLab 'groupe/sous-groupe/projet' → Gitea (org, repo_name)."""
     parts = path_with_namespace.rsplit("/", 1)
     if len(parts) == 1:
@@ -73,8 +75,7 @@ async def _path_to_gitea(path_with_namespace: str, root_org: str) -> tuple[str, 
     # closest parent org.
     # E.g.  mon-equipe/projets → org=root_org-projets, repo=projet
     #       mon-equipe/projets/a/b → org=root_org-a-b, repo=repo_name
-    clean = sub_path.replace("/", "-")
-    org = f"{root_org}-{clean}" if clean != root_org else root_org
+    org = sub_path.replace(gitlab_root, root_org).replace("/", "-")
     return org, repo
 
 
@@ -94,8 +95,12 @@ async def run_full_sync() -> None:
         gl_ok = await gl.health_check()
         ge_ok = await ge.health_check()
         async with state._lock:
-            state.gitlab_health = ServiceHealth.ONLINE if gl_ok else ServiceHealth.OFFLINE
-            state.gitea_health = ServiceHealth.ONLINE if ge_ok else ServiceHealth.OFFLINE
+            state.gitlab_health = (
+                ServiceHealth.ONLINE if gl_ok else ServiceHealth.OFFLINE
+            )
+            state.gitea_health = (
+                ServiceHealth.ONLINE if ge_ok else ServiceHealth.OFFLINE
+            )
 
         if not gl_ok:
             msg = "GitLab is unreachable – skipping scan"
@@ -124,7 +129,9 @@ async def run_full_sync() -> None:
             gl_id = proj["id"]
             gl_name = proj["name"]
 
-            org, repo = await _path_to_gitea(gl_path, settings.gitea_target_org)
+            org, repo = await _path_to_gitea(
+                gl_path, settings.gitea_target_org, settings.gitlab_target_group
+            )
             key = f"{org}/{repo}"
 
             # Update state
